@@ -2,17 +2,27 @@ package com.vincent.pseudo.solid
 
 import android.graphics.Paint
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.Slider
-import androidx.compose.runtime.*
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
-import kotlin.math.*
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 // 三维点数据类
 data class Point3D(
@@ -27,25 +37,33 @@ data class Point3D(
 
 @Composable
 fun Pseudo3DScreen(modifier: Modifier) {
-    var rotationZ by remember { mutableFloatStateOf(0f) }
+    var rotationX by remember { mutableFloatStateOf(30f) }
+    var rotationY by remember { mutableFloatStateOf(45f) }
+    val rotationZ by remember { mutableFloatStateOf(0f) }
+    var lastDragPosition by remember { mutableStateOf<Offset?>(null) }
 
-    Column(
+    Box(
         modifier = modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
+        contentAlignment = Alignment.Center
     ) {
         Box3D(
-            modifier = Modifier.size(400.dp),
+            modifier = Modifier
+                .size(400.dp)
+                .pointerInput(Unit) {
+                    detectDragGestures(
+                        onDragStart = { offset -> lastDragPosition = offset },
+                        onDragEnd = { lastDragPosition = null },
+                        onDragCancel = { lastDragPosition = null },
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            rotationX = (rotationX + dragAmount.y / 3) % 360
+                            rotationY = (rotationY + dragAmount.x / 3) % 360
+                        }
+                    )
+                },
+            rotationX = rotationX,
+            rotationY = rotationY,
             rotationZ = rotationZ
-        )
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        Slider(
-            value = rotationZ,
-            onValueChange = { rotationZ = it },
-            valueRange = 0f..(2 * PI).toFloat(),
-            modifier = Modifier.width(300.dp)
         )
     }
 }
@@ -53,6 +71,8 @@ fun Pseudo3DScreen(modifier: Modifier) {
 @Composable
 fun Box3D(
     modifier: Modifier = Modifier,
+    rotationX: Float = 30f,
+    rotationY: Float = 45f,
     rotationZ: Float = 0f
 ) {
     Canvas(modifier = modifier) {
@@ -62,19 +82,27 @@ fun Box3D(
         // 投影函数
         fun project(p: Point3D): Offset {
             val scale = 40f
-            val angle = (30f / 180f * PI).toFloat()
+            
+            // 转换为弧度
+            val rx = (rotationX * PI / 180).toFloat()
+            val ry = (rotationY * PI / 180).toFloat()
+            val rz = (rotationZ * PI / 180).toFloat()
 
-            // Z轴旋转
-            val rx = p.x * cos(rotationZ) - p.y * sin(rotationZ)
-            val ry = p.x * sin(rotationZ) + p.y * cos(rotationZ)
+            // 绕X轴旋转
+            val y1 = p.y * cos(rx) - p.z * sin(rx)
+            val z1 = p.y * sin(rx) + p.z * cos(rx)
 
-            // 等轴测投影
-            val xProj = (rx - ry) * cos(angle)
-            val yProj = (rx + ry) * sin(angle) - p.z
+            // 绕Y轴旋转
+            val x2 = p.x * cos(ry) + z1 * sin(ry)
+//            val z2 = -p.x * sin(ry) + z1 * cos(ry)
+
+            // 绕Z轴旋转
+            val x3 = x2 * cos(rz) - y1 * sin(rz)
+            val y3 = x2 * sin(rz) + y1 * cos(rz)
 
             return Offset(
-                xProj * scale + canvasWidth / 2,
-                -yProj * scale + canvasHeight / 2 // Y轴翻转
+                x3 * scale + canvasWidth / 2,
+                -y3 * scale + canvasHeight / 2 // Y轴翻转
             )
         }
 
@@ -106,40 +134,61 @@ fun Box3D(
             )
         }
 
-        // 绘制三维平面
-        fun drawPlane() {
-            val lines = listOf(
-                Pair(Point3D(0f, 0f, 0f), Point3D(1f, 0f, 0f)),
-                Pair(Point3D(0f, 0f, 0f), Point3D(0f, 1f, 0f)),
-                Pair(Point3D(0f, 0f, 0f), Point3D(1f, 1f, 0f)),
-                Pair(Point3D(0f, 1f, 0f), Point3D(1f, 1f, 0f)),
-                Pair(Point3D(1f, 0f, 0f), Point3D(1f, 1f, 0f)),
-                Pair(Point3D(0f, 1f, 0f), Point3D(1f, 0f, 0f))
-            )
-
+        // 绘制网格
+        fun drawGrid() {
+            val gridSize = 5
+            val step = 1f
+            val gridColor = Color.Gray.copy(alpha = 0.3f)
             val paint = Paint().apply {
-                color = Color.White.toArgb()
-                strokeWidth = 2f
+                color = gridColor.toArgb()
+                strokeWidth = 1f
                 isAntiAlias = true
             }
 
-            lines.forEach { (start, end) ->
-                val startOffset = project(start)
-                val endOffset = project(end)
-                drawContext.canvas.nativeCanvas.drawLine(
-                    startOffset.x,
-                    startOffset.y,
-                    endOffset.x,
-                    endOffset.y,
-                    paint
-                )
+            // XY平面网格
+            for (i in -gridSize..gridSize) {
+                val startX = project(Point3D(i * step, -gridSize * step, 0f))
+                val endX = project(Point3D(i * step, gridSize * step, 0f))
+                val startY = project(Point3D(-gridSize * step, i * step, 0f))
+                val endY = project(Point3D(gridSize * step, i * step, 0f))
+
+                drawContext.canvas.nativeCanvas.apply {
+                    drawLine(startX.x, startX.y, endX.x, endX.y, paint)
+                    drawLine(startY.x, startY.y, endY.x, endY.y, paint)
+                }
+            }
+
+            // XZ平面网格
+            for (i in -gridSize..gridSize) {
+                val startX = project(Point3D(i * step, 0f, -gridSize * step))
+                val endX = project(Point3D(i * step, 0f, gridSize * step))
+                val startZ = project(Point3D(-gridSize * step, 0f, i * step))
+                val endZ = project(Point3D(gridSize * step, 0f, i * step))
+
+                drawContext.canvas.nativeCanvas.apply {
+                    drawLine(startX.x, startX.y, endX.x, endX.y, paint)
+                    drawLine(startZ.x, startZ.y, endZ.x, endZ.y, paint)
+                }
+            }
+
+            // YZ平面网格
+            for (i in -gridSize..gridSize) {
+                val startY = project(Point3D(0f, i * step, -gridSize * step))
+                val endY = project(Point3D(0f, i * step, gridSize * step))
+                val startZ = project(Point3D(0f, -gridSize * step, i * step))
+                val endZ = project(Point3D(0f, gridSize * step, i * step))
+
+                drawContext.canvas.nativeCanvas.apply {
+                    drawLine(startY.x, startY.y, endY.x, endY.y, paint)
+                    drawLine(startZ.x, startZ.y, endZ.x, endZ.y, paint)
+                }
             }
         }
 
         // 执行绘制
+        drawGrid()
         drawAxis(Color.Red, Point3D(5f, 0f, 0f), "X")
         drawAxis(Color.Green, Point3D(0f, 5f, 0f), "Y")
-        drawAxis(Color.Blue, Point3D(0f, 0f, -5f), "Z")
-        drawPlane()
+        drawAxis(Color.Blue, Point3D(0f, 0f, 5f), "Z")
     }
 }
