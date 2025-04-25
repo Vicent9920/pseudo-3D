@@ -136,12 +136,13 @@ private fun drawAxis(
 fun project(p: Point3D, rotationZ: Double): Offset {
 
     val scale = 40f
-    // 使用弧度进行计算，
+    // 专业数学环境（微积分、复分析）中，三角函数的参数默认是“弧度”。
+    // 因此 Math 三角函数中的参数都是弧度，因此这里需要转换角度
     val angle = 30.0 / 180.0 * Math.PI // 取整数会出错，需要注意数字计算
-    // 绕Z轴旋转
+    // 绕Z轴旋转 线性变换xy
     val rx = p.x * cos(rotationZ) - p.y * sin(rotationZ)
     val ry = p.x * sin(rotationZ) + p.y * cos(rotationZ)
-    // 等轴测投影
+    // 等轴测投影 线性变换xy
     val xProj = (rx - ry) * cos(angle)
     val yProj = (rx + ry) * sin(angle) - p.z
 
