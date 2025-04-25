@@ -19,7 +19,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             Pseudo3DTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Pseudo3DScreen(
+                    Rotating3DPlanesDemo(
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
@@ -32,6 +32,6 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun Coordinate3DSystemPreview() {
     Pseudo3DTheme {
-        Pseudo3DScreen(Modifier)
+        Rotating3DPlanesDemo(Modifier)
     }
 }
