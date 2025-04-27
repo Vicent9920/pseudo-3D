@@ -44,6 +44,7 @@ data class Point3D(
 @Composable
 fun Rotating3DPlanesDemo(modifier: Modifier) {
     var angleDeg by remember { mutableDoubleStateOf(0.0) }
+    var distance by remember { mutableDoubleStateOf(50.0) }
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.Center
@@ -63,7 +64,8 @@ fun Rotating3DPlanesDemo(modifier: Modifier) {
                 Color.Red,
                 Point3D(5f, 0f, 0f),
                 "X",
-                angleDeg
+                angleDeg,
+                distance
             )
             // Y轴
             drawAxis(
@@ -71,7 +73,8 @@ fun Rotating3DPlanesDemo(modifier: Modifier) {
                 Color.Green,
                 Point3D(0f, 5f, 0f),
                 "Y",
-                angleDeg
+                angleDeg,
+                distance
             )
 
             // Z轴
@@ -80,20 +83,37 @@ fun Rotating3DPlanesDemo(modifier: Modifier) {
                 Color.Blue,
                 Point3D(0f, 0f, 5f),
                 "Z",
-                angleDeg
+                angleDeg,
+                distance
             )
+
+            drawGrid(drawContext.canvas.nativeCanvas, angleDeg, distance)
         }
         Spacer(Modifier.height(16.dp))
         // Slider 部分
         Text(
-            "Rotation: ${angleDeg.toInt()}°",
+            "Rotation: ${(angleDeg * 360 / 2 / Math.PI).toInt()}°",
             modifier = Modifier.align(Alignment.CenterHorizontally)
         )
         Slider(
             value = angleDeg.toFloat(),
             onValueChange = { angleDeg = it.toDouble() },
             // 绕Z轴旋转的范围是0到2π
-            valueRange = 0f..(Math.PI*2).toFloat(),
+            valueRange = 0f..(Math.PI * 2).toFloat(),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(Modifier.height(14.dp))
+        // Slider 部分
+        Text(
+            "Distance: $distance",
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        )
+        Slider(
+            value = distance.toFloat(),
+            onValueChange = { distance = it.toDouble() },
+            // 绕Z轴旋转的范围是0到2π
+            valueRange = 18f..100f,
             modifier = Modifier.fillMaxWidth()
         )
     }
@@ -105,10 +125,11 @@ private fun drawAxis(
     color: Color,
     end: Point3D,
     label: String,
-    rotationZ: Double
+    rotationZ: Double,
+    distance: Double
 ) {
-    val startOffset = project(Point3D.Zero, rotationZ)
-    val endOffset = project(end, rotationZ)
+    val startOffset = project(Point3D.Zero, rotationZ, distance)
+    val endOffset = project(end, rotationZ, distance)
     val paint = Paint().apply {
         this.color = color.toArgb()
         strokeWidth = 2.dp.value
@@ -132,10 +153,29 @@ private fun drawAxis(
     )
 }
 
-// 投影函数 正等轴测投影
-fun project(p: Point3D, rotationZ: Double): Offset {
+fun drawGrid(canvas: NativeCanvas, rotationZ: Double, distance: Double) {
+    val lines: MutableList<Pair<Point3D, Point3D>> = mutableListOf()
+    for (i in -32..32) {
+        lines.add(Pair(Point3D(i.toFloat(), -5f, 0f), Point3D(i.toFloat(), 5f, 0f)))
+        lines.add(Pair(Point3D(-5f, i.toFloat(), 0f), Point3D(5f, i.toFloat(), 0f)))
+    }
+    val paint = Paint().apply {
+        this.color = Color.Black.toArgb()
+        strokeWidth = 1.dp.value
+        isAntiAlias = true
+    }
+    lines.forEach { line ->
+        val p0 = project(line.first, rotationZ, distance)
+        val p1 = project(line.second, rotationZ, distance)
+        canvas.drawLine(p0.x, p0.y, p1.x, p1.y, paint)
+    }
 
-    val scale = 40f
+}
+
+// 投影函数 正等轴测投影
+fun project(p: Point3D, rotationZ: Double, distance: Double): Offset {
+
+    val scale = 32f
     // 专业数学环境（微积分、复分析）中，三角函数的参数默认是“弧度”。
     // 因此 Math 三角函数中的参数都是弧度，因此这里需要转换角度
     val angle = 30.0 / 180.0 * Math.PI // 取整数会出错，需要注意数字计算
@@ -146,5 +186,11 @@ fun project(p: Point3D, rotationZ: Double): Offset {
     val xProj = (rx - ry) * cos(angle)
     val yProj = (rx + ry) * sin(angle) - p.z
 
-    return Offset((xProj * scale).toFloat(), (yProj * scale).toFloat())
+    // 增加透视
+    var radio = distance / (distance - yProj)
+    if (distance == 0.0) {
+        radio = 1.0
+    }
+
+    return Offset((xProj * scale * radio).toFloat(), (yProj * scale * radio).toFloat())
 }
